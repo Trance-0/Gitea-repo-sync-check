@@ -35,9 +35,9 @@ jobs:
         run: |
           # Assume main branch is 'main'; change to 'master' if needed.
           # Force match main
-          if git show-ref --verify --quiet refs/remotes/gitea/main; then
-            git checkout main || git checkout -b main
-            git reset --hard gitea/main
+          if git show-ref --verify --quiet refs/remotes/gitea/master; then
+            git checkout master || git checkout -b master
+            git reset --hard gitea/master
           fi
 
           # Mirror all refs (branches, tags) from gitea to origin (GitHub)
