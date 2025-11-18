@@ -1,0 +1,48 @@
+name: Sync from Gitea
+
+on:
+  schedule:
+    # 3 times per day (UTC). Adjust as you like.
+    # This example: 00:00, 08:00, 16:00 UTC
+    - cron: '0 0,8,16 * * *'
+  workflow_dispatch: {}  # allow manual trigger
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout GitHub repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history, needed for proper mirroring
+
+      - name: Add Gitea remote and fetch
+        run: |
+          GITEA_URL="${{ secrets.GITEA_URL }}"
+          USER="${{ secrets.GITEA_USERNAME }}"
+          TOKEN="${{ secrets.GITEA_TOKEN }}"
+
+          # Authenticated URL: https://USER:TOKEN@...
+          AUTH_URL="${GITEA_URL/https:\/\//https:\/\/$USER:$TOKEN@}"
+
+          git remote add gitea "$AUTH_URL"
+
+          # Fetch everything from Gitea
+          git fetch gitea --prune
+
+      - name: Reset GitHub branches to match Gitea
+        run: |
+          # Assume main branch is 'main'; change to 'master' if needed.
+          # Force match main
+          if git show-ref --verify --quiet refs/remotes/gitea/main; then
+            git checkout main || git checkout -b main
+            git reset --hard gitea/main
+          fi
+
+          # Mirror all refs (branches, tags) from gitea to origin (GitHub)
+          git push origin --mirror
+        env:
+          # Ensure we use the GitHub token for pushing back
+          GIT_ASKPASS: /bin/true
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
