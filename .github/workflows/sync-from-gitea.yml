@@ -2,47 +2,42 @@ name: Sync from Gitea
 
 on:
   schedule:
-    # 3 times per day (UTC). Adjust as you like.
-    # This example: 00:00, 08:00, 16:00 UTC
+    # 3 times per day (UTC) – adjust if you want different times
     - cron: '0 0,8,16 * * *'
-  workflow_dispatch: {}  # allow manual trigger
+  workflow_dispatch: {}  # allow manual runs
+
+permissions:
+  contents: write  # allow GITHUB_TOKEN to push to this repo
 
 jobs:
   mirror:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout GitHub repo
+      - name: Check out GitHub repo
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # full history, needed for proper mirroring
+          fetch-depth: 0  # full history
 
-      - name: Add Gitea remote and fetch
+      - name: Fetch from Gitea
+        env:
+          GITEA_URL: ${{ secrets.GITEA_URL }}
+          GITEA_USER: ${{ secrets.GITEA_USERNAME }}
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
         run: |
-          GITEA_URL="${{ secrets.GITEA_URL }}"
-          USER="${{ secrets.GITEA_USERNAME }}"
-          TOKEN="${{ secrets.GITEA_TOKEN }}"
-
-          # Authenticated URL: https://USER:TOKEN@...
-          AUTH_URL="${GITEA_URL/https:\/\//https:\/\/$USER:$TOKEN@}"
+          # Build authenticated Gitea URL: https://USER:TOKEN@...
+          AUTH_URL="${GITEA_URL/https:\/\//https:\/\/$GITEA_USER:$GITEA_TOKEN@}"
 
           git remote add gitea "$AUTH_URL"
-
-          # Fetch everything from Gitea
           git fetch gitea --prune
 
-      - name: Reset GitHub branches to match Gitea
-        run: |
-          # Assume main branch is 'main'; change to 'master' if needed.
-          # Force match main
-          if git show-ref --verify --quiet refs/remotes/gitea/master; then
-            git checkout master || git checkout -b master
-            git reset --hard gitea/master
-          fi
-
-          # Mirror all refs (branches, tags) from gitea to origin (GitHub)
-          git push origin --mirror
+      - name: Mirror to GitHub
         env:
-          # Ensure we use the GitHub token for pushing back
-          GIT_ASKPASS: /bin/true
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}  # owner/repo
+        run: |
+          # Re-point origin to an authenticated HTTPS URL using GITHUB_TOKEN
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git"
+
+          # Force GitHub to match whatever we fetched from Gitea
+          git push origin --mirror
